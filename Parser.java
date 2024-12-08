@@ -1,127 +1,147 @@
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 public class Parser {
-    private final Tokenizer tokenizer;
-    private Tokenizer.Token currentToken;
-    private final Map<String, Integer> variables;
+    private List<Tokenizer.Token> tokens;
+    private int currentTokenIndex;
+    private SymbolTable symbolTable;
 
-    public Parser(String input) throws IOException, Tokenizer.TokenizerException {
-        this.tokenizer = new Tokenizer(input);
-        this.variables = new HashMap<>();
-        nextToken();
+    public Parser(List<Tokenizer.Token> tokens) {
+        this.tokens = tokens;
+        this.currentTokenIndex = 0;
+        this.symbolTable = new SymbolTable();
     }
 
-    private void nextToken() throws IOException, Tokenizer.TokenizerException {
-        currentToken = tokenizer.nextToken();
+    private Tokenizer.Token getCurrentToken() {
+        if (currentTokenIndex < tokens.size()) {
+            return tokens.get(currentTokenIndex);
+        }
+        return null;
     }
 
-    public Map<String, Integer> parse() throws IOException, Tokenizer.TokenizerException, ParseException {
-        while (currentToken.type != Tokenizer.EOF) {
-            parseAssignment();
+    private Tokenizer.Token consume(Tokenizer.TokenType expectedType) {
+        Tokenizer.Token currentToken = getCurrentToken();
+        
+        if (currentToken == null) {
+            throw new RuntimeException("Error");
         }
-        return variables;
+        
+        if (currentToken.getType() == expectedType) {
+            currentTokenIndex++;
+            return currentToken;
+        }
+        
+        throw new RuntimeException("Error");
     }
 
-    private void parseAssignment() throws IOException, Tokenizer.TokenizerException, ParseException {
-        if (currentToken.type != Tokenizer.ID) {
-            throw new ParseException("Expected identifier");
-        }
-        String varName = currentToken.value;
-        nextToken();
-
-        if (currentToken.type != Tokenizer.ASSIGN) {
-            throw new ParseException("Expected '='");
-        }
-        nextToken();
-
-        int value = parseExpression();
-
-        if (currentToken.type != Tokenizer.SEMICOLON) {
-            throw new ParseException("Expected ';'");
-        }
-        nextToken();
-
-        variables.put(varName, value);
+    public void parse() {
+        program();
     }
 
-    private int parseExpression() throws IOException, Tokenizer.TokenizerException, ParseException {
-        int value = parseTerm();
+    private void program() {
+        while (currentTokenIndex < tokens.size()) {
+            assignment();
+        }
+    }
 
-        while (currentToken.type == Tokenizer.PLUS || currentToken.type == Tokenizer.MINUS) {
-            int op = currentToken.type;
-            nextToken();
-            int termValue = parseTerm();
+    private void assignment() {
+        Tokenizer.Token identifier = consume(Tokenizer.TokenType.ID);
+        consume(Tokenizer.TokenType.ASSIGN);
+        int value = exp();
+        consume(Tokenizer.TokenType.SEMICOLON);
+        symbolTable.assign(identifier.getValue(), value);
+    }
 
-            if (op == Tokenizer.PLUS) {
-                value += termValue;
+    private int exp() {
+        int value = term();
+        while (getCurrentToken() != null && 
+               (getCurrentToken().getType() == Tokenizer.TokenType.PLUS || 
+                getCurrentToken().getType() == Tokenizer.TokenType.MINUS)) {
+            Tokenizer.Token operator = getCurrentToken();
+            if (operator.getType() == Tokenizer.TokenType.PLUS) {
+                consume(Tokenizer.TokenType.PLUS);
+                value += term();
             } else {
-                value -= termValue;
+                consume(Tokenizer.TokenType.MINUS);
+                value -= term();
             }
         }
-
         return value;
     }
 
-    private int parseTerm() throws IOException, Tokenizer.TokenizerException, ParseException {
-        int value = parseFactor();
-
-        while (currentToken.type == Tokenizer.MULTIPLY) {
-            nextToken();
-            int factorValue = parseFactor();
-            value *= factorValue;
+    private int term() {
+        int value = fact();
+        while (getCurrentToken() != null && 
+               getCurrentToken().getType() == Tokenizer.TokenType.MULTIPLY) {
+            consume(Tokenizer.TokenType.MULTIPLY);
+            value *= fact();
         }
-
         return value;
     }
 
-    private int parseFactor() throws IOException, Tokenizer.TokenizerException, ParseException {
-        if (currentToken.type == Tokenizer.LEFTP) {
-            nextToken();
-            int value = parseExpression();
-            
-            if (currentToken.type != Tokenizer.RIGHTP) {
-                throw new ParseException("Expected ')'");
+    private int fact() {
+        boolean negate = false;
+
+        while (getCurrentToken() != null && 
+               (getCurrentToken().getType() == Tokenizer.TokenType.MINUS || 
+                getCurrentToken().getType() == Tokenizer.TokenType.PLUS)) {
+            if (getCurrentToken().getType() == Tokenizer.TokenType.MINUS) {
+                negate = !negate;
             }
-            nextToken();
-            return value;
+            consume(getCurrentToken().getType());
+        }
+    
+        Tokenizer.Token currentToken = getCurrentToken();
+        if (currentToken == null) {
+            throw new RuntimeException("Error");
+        }
+    
+        int value;
+        switch (currentToken.getType()) {
+            case LEFTP:
+                consume(Tokenizer.TokenType.LEFTP);
+                value = exp();
+                consume(Tokenizer.TokenType.RIGHTP);
+                break;
+            case LITERAL:
+                value = Integer.parseInt(currentToken.getValue());
+                consume(Tokenizer.TokenType.LITERAL);
+                break;
+            case ID:
+                value = symbolTable.resolve(currentToken.getValue());
+                consume(Tokenizer.TokenType.ID);
+                break;
+            default:
+                throw new RuntimeException("Error");
         }
 
-        if (currentToken.type == Tokenizer.MINUS) {
-            nextToken();
-            return -parseFactor();
+        if (negate) {
+            value = -value;
         }
+    
+        return value;
+    }
+    
 
-        if (currentToken.type == Tokenizer.PLUS) {
-            nextToken();
-            return parseFactor();
-        }
+    public SymbolTable getSymbolTable() {
+        return symbolTable;
+    }
+}
 
-        if (currentToken.type == Tokenizer.LITERAL) {
-            int value = Integer.parseInt(currentToken.value);
-            nextToken();
-            return value;
-        }
+class SymbolTable {
+    private java.util.Map<String, Integer> variables = new java.util.HashMap<>();
 
-        if (currentToken.type == Tokenizer.ID) {
-            String varName = currentToken.value;
-            
-            if (!variables.containsKey(varName)) {
-                throw new ParseException("Uninitialized variable: " + varName);
-            }
-            
-            int value = variables.get(varName);
-            nextToken();
-            return value;
-        }
-
-        throw new ParseException("Unexpected token");
+    public void assign(String name, int value) {
+        variables.put(name, value);
     }
 
-    public static class ParseException extends Exception {
-        public ParseException(String message) {
-            super(message);
+    public int resolve(String name) {
+        if (!variables.containsKey(name)) {
+            throw new RuntimeException("Undefined variable: " + name);
         }
+        return variables.get(name);
+    }
+
+    public java.util.Set<String> getVariableNames() {
+        return variables.keySet();
     }
 }

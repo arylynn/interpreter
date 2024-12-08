@@ -1,144 +1,96 @@
-import java.io.IOException;
-import java.io.PushbackReader;
-import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Tokenizer {
-    public static final int 
-        EOF = 256,
-        ID = 257,
-        LITERAL = 258,
-        ASSIGN = 259,
-        SEMICOLON = 260,
-        PLUS = 261,
-        MINUS = 262,
-        MULTIPLY = 263,
-        LEFTP = 264,
-        RIGHTP = 265;
+    public enum TokenType {
+        ASSIGN,
+        PLUS,
+        MINUS,
+        MULTIPLY,
+        LEFTP,
+        RIGHTP,
+        LITERAL,
+        ID,
+        SEMICOLON
+    }
 
     public static class Token {
-        public final int type;
-        public final String value;
+        private TokenType type;
+        private String value;
 
-        public Token(int type, String value) {
+        public Token(TokenType type, String value) {
             this.type = type;
             this.value = value;
         }
-    }
 
-    private final PushbackReader reader;
-    private int currentChar;
+        public TokenType getType() {
+            return type;
+        }
 
-    public Tokenizer(String input) throws IOException {
-        this.reader = new PushbackReader(new StringReader(input));
-        nextChar();
-    }
-
-    private void nextChar() throws IOException {
-        currentChar = reader.read();
-    }
-
-    private boolean isLetter(int c) {
-        return (c >= 'a' && c <= 'z') || 
-               (c >= 'A' && c <= 'Z') || 
-               c == '_';
-    }
-
-    private boolean isDigit(int c) {
-        return c >= '0' && c <= '9';
-    }
-
-    private void skipWhitespace() throws IOException {
-        while (Character.isWhitespace(currentChar)) {
-            nextChar();
+        public String getValue() {
+            return value;
         }
     }
 
-    public Token nextToken() throws IOException, TokenizerException {
-        skipWhitespace();
+    public List<Token> tokenize(String input) {
+        List<Token> tokens = new ArrayList<>();
+        int currentIndex = 0;
 
-        if (currentChar == -1) {
-            return new Token(EOF, "");
-        }
+        while (currentIndex < input.length()) {
+            char currentChar = input.charAt(currentIndex);
 
-        if (isLetter(currentChar)) {
-            return parseIdentifier();
-        }
-
-        if (isDigit(currentChar)) {
-            return parseLiteral();
-        }
-
-        switch (currentChar) {
-            case '=' -> {
-                nextChar();
-                return new Token(ASSIGN, "=");
+            if (currentChar == '=') {
+                tokens.add(new Token(TokenType.ASSIGN, "="));
+                currentIndex++;
+            } else if (currentChar == '+') {
+                tokens.add(new Token(TokenType.PLUS, "+"));
+                currentIndex++;
+            } else if (currentChar == '-') {
+                tokens.add(new Token(TokenType.MINUS, "-"));
+                currentIndex++;
+            } else if (currentChar == '*') {
+                tokens.add(new Token(TokenType.MULTIPLY, "*"));
+                currentIndex++;
+            } else if (currentChar == '(') {
+                tokens.add(new Token(TokenType.LEFTP, "("));
+                currentIndex++;
+            } else if (currentChar == ')') {
+                tokens.add(new Token(TokenType.RIGHTP, ")"));
+                currentIndex++;
+            } else if (currentChar == ';') {
+                tokens.add(new Token(TokenType.SEMICOLON, ";"));
+                currentIndex++;
+            } else if (Character.isWhitespace(currentChar)) {
+                currentIndex++;
+            } else if (Character.isLetter(currentChar) || currentChar == '_') {
+                int start = currentIndex;
+                while (currentIndex < input.length() && 
+                        (Character.isLetterOrDigit(input.charAt(currentIndex)) || 
+                        input.charAt(currentIndex) == '_')) {
+                    currentIndex++;
+                }
+                
+                String identifier = input.substring(start, currentIndex);
+                tokens.add(new Token(TokenType.ID, identifier));
+            } else if (Character.isDigit(currentChar)) {
+                if (currentChar == '0' && currentIndex + 1 < input.length() && 
+                    Character.isDigit(input.charAt(currentIndex + 1))) {
+                    throw new IllegalArgumentException("Error");
+                }
+                
+                int start = currentIndex;
+                while (currentIndex < input.length() && 
+                        Character.isDigit(input.charAt(currentIndex))) {
+                    currentIndex++;
+                }
+                
+                String literal = input.substring(start, currentIndex);
+                tokens.add(new Token(TokenType.LITERAL, literal));
+            } else {
+                currentIndex++;
             }
-            case ';' -> {
-                nextChar();
-                return new Token(SEMICOLON, ";");
-            }
-            case '+' -> {
-                nextChar();
-                return new Token(PLUS, "+");
-            }
-            case '-' -> {
-                nextChar();
-                return new Token(MINUS, "-");
-            }
-            case '*' -> {
-                nextChar();
-                return new Token(MULTIPLY, "*");
-            }
-            case '(' -> {
-                nextChar();
-                return new Token(LEFTP, "(");
-            }
-            case ')' -> {
-                nextChar();
-                return new Token(RIGHTP, ")");
-            }
-            default -> throw new TokenizerException("Unexpected character: " + (char)currentChar);
-        }
-    }
-
-    private Token parseIdentifier() throws IOException {
-        StringBuilder sb = new StringBuilder();
-        
-        sb.append((char)currentChar);
-        nextChar();
-
-        while (isLetter(currentChar) || isDigit(currentChar)) {
-            sb.append((char)currentChar);
-            nextChar();
         }
 
-        return new Token(ID, sb.toString());
-    }
-
-    private Token parseLiteral() throws IOException, TokenizerException {
-        if (currentChar == '0') {
-            nextChar();
-            if (isDigit(currentChar)) {
-                throw new TokenizerException("Leading zeros are not allowed");
-            }
-            return new Token(LITERAL, "0");
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append((char)currentChar);
-        nextChar();
-
-        while (isDigit(currentChar)) {
-            sb.append((char)currentChar);
-            nextChar();
-        }
-
-        return new Token(LITERAL, sb.toString());
-    }
-
-    public static class TokenizerException extends Exception {
-        public TokenizerException(String message) {
-            super(message);
-        }
+        return tokens;
     }
 }

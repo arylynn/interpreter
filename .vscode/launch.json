@@ -6,6 +6,20 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Test",
+            "request": "launch",
+            "mainClass": "Test",
+            "projectName": "interpreter_68f9dfc0"
+        },
+        {
+            "type": "java",
+            "name": "Inter",
+            "request": "launch",
+            "mainClass": "Inter",
+            "projectName": "interpreter_68f9dfc0"
+        },
+        {
+            "type": "java",
             "name": "Launch Current File",
             "request": "launch",
             "mainClass": "${file}"
